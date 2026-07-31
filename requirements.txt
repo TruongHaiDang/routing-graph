@@ -1,0 +1,6 @@
+gymnasium
+pygame
+osmnx
+networkx
+shapely
+geopandas

@@ -1,1 +1,1 @@
-from RoutingGraphEnv.envs.grid_world import GridWorldEnv
+from RoutingGraphEnv.envs.routing_graph import RoutingGraphEnv
