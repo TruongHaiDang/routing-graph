@@ -2,85 +2,30 @@ from __future__ import annotations
 
 import random
 
+import networkx as nx
+import numpy as np
 import osmnx as ox
 from networkx import MultiDiGraph
-from shapely.geometry import Point, Polygon
 
 
 class OpenStreetMapService:
-    @staticmethod
-    def get_place_polygon(place_name: str) -> Polygon:
-        """
-        Download the administrative boundary polygon of a place.
-
-        Example:
-            polygon = OpenStreetMapService.get_place_polygon(
-                "Ho Chi Minh City, Vietnam"
-            )
-        """
-        gdf = ox.geocode_to_gdf(place_name)
-        return gdf.geometry.iloc[0]
+    """Load road networks and select reproducible routing nodes."""
 
     @staticmethod
     def load_drive_graph(
         place_name: str,
         simplify: bool = True,
     ) -> MultiDiGraph:
-        """
-        Download the drivable road network.
-        """
-        return ox.graph_from_place(
+        graph = ox.graph_from_place(
             place_name,
             network_type="drive",
             simplify=simplify,
         )
 
-    @staticmethod
-    def load_drive_graph_from_polygon(
-        polygon: Polygon,
-        simplify: bool = True,
-    ) -> MultiDiGraph:
-        """
-        Download the drivable road network inside a polygon.
-        """
-        return ox.graph_from_polygon(
-            polygon,
-            network_type="drive",
-            simplify=simplify,
+        return ox.truncate.largest_component(
+            graph,
+            strongly=True,
         )
-
-    @staticmethod
-    def generate_random_points(
-        polygon: Polygon,
-        count: int,
-        seed: int | None = None,
-    ) -> list[dict]:
-        """
-        Generate random coordinates inside a polygon.
-        """
-
-        rng = random.Random(seed)
-
-        min_x, min_y, max_x, max_y = polygon.bounds
-
-        points = []
-
-        while len(points) < count:
-            longitude = rng.uniform(min_x, max_x)
-            latitude = rng.uniform(min_y, max_y)
-
-            point = Point(longitude, latitude)
-
-            if polygon.contains(point):
-                points.append(
-                    {
-                        "id": len(points),
-                        "latitude": latitude,
-                        "longitude": longitude,
-                    }
-                )
-
-        return points
 
     @staticmethod
     def generate_random_road_nodes(
@@ -88,144 +33,56 @@ class OpenStreetMapService:
         count: int,
         seed: int | None = None,
     ) -> list[dict]:
-        """
-        Randomly select nodes from the road network.
-        """
-
-        rng = random.Random(seed)
+        if count < 2:
+            raise ValueError("count must be at least 2")
 
         node_ids = list(graph.nodes)
-
         if count > len(node_ids):
             raise ValueError(
                 f"Requested {count} nodes but graph only has {len(node_ids)} nodes."
             )
 
-        selected = rng.sample(node_ids, count)
+        selected = random.Random(seed).sample(node_ids, count)
+        return [
+            {
+                "id": index,
+                "osm_node_id": node_id,
+                "latitude": graph.nodes[node_id]["y"],
+                "longitude": graph.nodes[node_id]["x"],
+            }
+            for index, node_id in enumerate(selected)
+        ]
 
-        result = []
-
-        for index, node_id in enumerate(selected):
-            node = graph.nodes[node_id]
-
-            result.append(
-                {
-                    "id": index,
-                    "osm_node_id": node_id,
-                    "latitude": node["y"],
-                    "longitude": node["x"],
-                }
-            )
-
-        return result
-
-    @staticmethod
+    @classmethod
     def generate_random_points_on_roads(
+        cls,
         place_name: str,
         count: int,
         seed: int | None = None,
     ) -> tuple[MultiDiGraph, list[dict]]:
-        """
-        Generate random coordinates inside the city and snap them
-        to the nearest road node.
-        """
+        graph = cls.load_drive_graph(place_name)
+        return graph, cls.generate_random_road_nodes(graph, count, seed)
 
-        polygon = OpenStreetMapService.get_place_polygon(place_name)
+    @staticmethod
+    def distance_matrix(
+        graph: MultiDiGraph,
+        nodes: list[dict],
+    ) -> np.ndarray:
+        """Compute selected-node distances with one Dijkstra run per source."""
+        node_ids = [node["osm_node_id"] for node in nodes]
+        matrix = np.full((len(node_ids), len(node_ids)), np.inf, dtype=np.float32)
+        np.fill_diagonal(matrix, 0.0)
 
-        graph = OpenStreetMapService.load_drive_graph_from_polygon(
-            polygon
-        )
-
-        rng = random.Random(seed)
-
-        min_x, min_y, max_x, max_y = polygon.bounds
-
-        points = []
-        used_nodes = set()
-
-        while len(points) < count:
-            longitude = rng.uniform(min_x, max_x)
-            latitude = rng.uniform(min_y, max_y)
-
-            point = Point(longitude, latitude)
-
-            if not polygon.contains(point):
-                continue
-
-            node_id = ox.distance.nearest_nodes(
+        for source_index, source_id in enumerate(node_ids):
+            lengths = nx.single_source_dijkstra_path_length(
                 graph,
-                X=longitude,
-                Y=latitude,
+                source_id,
+                weight="length",
             )
+            for target_index, target_id in enumerate(node_ids):
+                if source_index != target_index:
+                    matrix[source_index, target_index] = lengths.get(
+                        target_id, float("inf")
+                    )
 
-            if node_id in used_nodes:
-                continue
-
-            used_nodes.add(node_id)
-
-            node = graph.nodes[node_id]
-
-            points.append(
-                {
-                    "id": len(points),
-                    "osm_node_id": node_id,
-                    "latitude": node["y"],
-                    "longitude": node["x"],
-                }
-            )
-
-        return graph, points
-
-    @staticmethod
-    def nearest_node(
-        graph: MultiDiGraph,
-        latitude: float,
-        longitude: float,
-    ) -> int:
-        """
-        Return the nearest road node.
-        """
-        return ox.distance.nearest_nodes(
-            graph,
-            X=longitude,
-            Y=latitude,
-        )
-
-    @staticmethod
-    def shortest_path(
-        graph: MultiDiGraph,
-        source_node: int,
-        target_node: int,
-    ) -> list[int]:
-        """
-        Compute the shortest path using edge length.
-        """
-        return ox.routing.shortest_path(
-            graph,
-            source_node,
-            target_node,
-            weight="length",
-        )
-
-    @staticmethod
-    def shortest_path_length(
-        graph: MultiDiGraph,
-        source_node: int,
-        target_node: int,
-    ) -> float:
-        """
-        Compute shortest path length in meters.
-        """
-
-        route = ox.routing.shortest_path(
-            graph,
-            source_node,
-            target_node,
-            weight="length",
-        )
-
-        return float(
-            sum(
-                ox.routing.route_to_gdf(graph, route)["length"]
-            )
-        )
+        return matrix

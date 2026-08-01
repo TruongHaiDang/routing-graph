@@ -10,6 +10,6 @@ name = "RoutingGraphEnv"
 version = "0.0.1"
 dependencies = [
   "gymnasium",
+  "osmnx",
   "pygame>=2.1.3",
-  "pre-commit",
 ]
