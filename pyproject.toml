@@ -8,8 +8,37 @@ packages = ["RoutingGraphEnv"]
 [project]
 name = "RoutingGraphEnv"
 version = "0.0.1"
+description = "A Gymnasium environment for route optimization on OpenStreetMap road networks"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Trương Hải Đăng" },
+]
+keywords = [
+  "gymnasium",
+  "openstreetmap",
+  "reinforcement-learning",
+  "route-optimization",
+  "routing",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
   "gymnasium",
   "osmnx",
   "pygame>=2.1.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/TruongHaiDang/routing-graph"
+Repository = "https://github.com/TruongHaiDang/routing-graph.git"
+Issues = "https://github.com/TruongHaiDang/routing-graph/issues"

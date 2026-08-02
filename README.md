@@ -31,3 +31,24 @@ cd RoutingGraphEnv
 pip install -e .
 ```
 
+## Upload to pypi.org
+
+Chạy tại thư mục project:
+
+```shell
+python3 -m build
+```
+
+Lệnh sẽ tạo thư mục `dist/` chứa file `.whl` và `.tar.gz`.
+
+Nếu chưa có module `build`:
+
+```shell
+python3 -m pip install build
+```
+
+Sau đó:
+
+```shell
+python3 -m twine upload dist/*
+```
